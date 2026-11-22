@@ -15,6 +15,7 @@ FEATURES = [
 ]
 
 TARGET = "rain"
+DATASET = "weather_2025_final.csv"
 
 
 # ==========================================
@@ -22,18 +23,57 @@ TARGET = "rain"
 # ==========================================
 
 def load_dataset(filename):
+    """Load model features and labels from a CSV file."""
     X = []
     y = []
 
-    with open(filename, "r", newline="") as file:
+    with open(filename, "r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
 
-        for row in reader:
-            inputs = [float(row[f]) for f in FEATURES]
-            label = int(row[TARGET])
+        for row_number, row in enumerate(reader, start=2):
+            precip_text = (row.get("precip_mm") or "").strip()
+
+            if not precip_text:
+                continue
+
+            try:
+                precipitation = float(precip_text)
+
+                temperature = float(row["mean_temp_c"])
+                pressure = float(row["pressure_hpa"])
+                wind_speed = float(row["wind_speed_ms"])
+
+                humidity_text = (row.get("humidity") or "").strip()
+                cloud_text = (row.get("cloud_cover") or "").strip()
+
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(
+                    f"Invalid or missing value in CSV row {row_number}: {error}"
+                ) from error
+
+            # The new dataset does not contain humidity or cloud cover.
+            # Missing values are represented by 0.0 for now. This preserves
+            # the original five-feature interface and allows those columns
+            # to be supplied later without changing the rest of the model.
+            humidity = float(humidity_text) if humidity_text else 0.0
+            cloud_cover = float(cloud_text) if cloud_text else 0.0
+
+            inputs = [
+                temperature,
+                humidity,
+                pressure,
+                wind_speed,
+                cloud_cover
+            ]
+
+            # Rain when precipitation is greater than zero.
+            label = 1 if precipitation > 0 else 0
 
             X.append(inputs)
             y.append(label)
+
+    if not X:
+        raise ValueError("The dataset contains no usable rows.")
 
     return X, y
 
@@ -54,7 +94,6 @@ def train_test_split(X, y, test_ratio=0.25, seed=42):
 
     X_train = [X[i] for i in train_indices]
     y_train = [y[i] for i in train_indices]
-
     X_test = [X[i] for i in test_indices]
     y_test = [y[i] for i in test_indices]
 
@@ -77,9 +116,8 @@ class StandardScaler:
         self.stds = []
 
         for col, mean in zip(columns, self.means):
-            variance = sum((v - mean) ** 2 for v in col) / len(col)
+            variance = sum((value - mean) ** 2 for value in col) / len(col)
             std = math.sqrt(variance)
-
             self.stds.append(std if std != 0 else 1)
 
     def transform(self, X):
@@ -109,7 +147,6 @@ class SingleLayerPerceptron:
         self.bias = 0
         self.history = []
 
-    # Initialize parameters
     def initialize(self, n_features):
         self.weights = [
             random.uniform(-0.1, 0.1)
@@ -117,21 +154,18 @@ class SingleLayerPerceptron:
         ]
         self.bias = 0
 
-    # Weighted sum
     def net_input(self, inputs):
         return sum(
-            w * x for w, x in zip(self.weights, inputs)
+            weight * value
+            for weight, value in zip(self.weights, inputs)
         ) + self.bias
 
-    # Step activation function
     def activation(self, value):
         return 1 if value >= 0 else 0
 
-    # Forward pass
     def forward(self, inputs):
         return self.activation(self.net_input(inputs))
 
-    # Update weights and bias
     def update(self, inputs, error):
         for i in range(len(self.weights)):
             self.weights[i] += (
@@ -140,9 +174,7 @@ class SingleLayerPerceptron:
 
         self.bias += self.learning_rate * error
 
-    # Training
     def fit(self, X, y):
-
         if not X or len(X) != len(y):
             raise ValueError("Invalid training dataset.")
 
@@ -155,14 +187,11 @@ class SingleLayerPerceptron:
         self.initialize(len(X[0]))
 
         for epoch in range(self.epochs):
-
             errors = 0
-
             indices = list(range(len(X)))
             random.shuffle(indices)
 
             for i in indices:
-
                 prediction = self.forward(X[i])
                 error = y[i] - prediction
 
@@ -183,11 +212,9 @@ class SingleLayerPerceptron:
 
         return self
 
-    # Predict one sample
     def predict_one(self, inputs):
         return self.forward(inputs)
 
-    # Predict multiple samples
     def predict(self, X):
         return [self.predict_one(row) for row in X]
 
@@ -197,12 +224,11 @@ class SingleLayerPerceptron:
 # ==========================================
 
 def evaluate_model(model, X_test, y_test):
-
     predictions = model.predict(X_test)
 
     correct = sum(
-        p == actual
-        for p, actual in zip(predictions, y_test)
+        prediction == actual
+        for prediction, actual in zip(predictions, y_test)
     )
 
     accuracy = correct / len(y_test) * 100
@@ -210,10 +236,10 @@ def evaluate_model(model, X_test, y_test):
     print("\n--- MODEL EVALUATION ---")
     print(f"Accuracy: {accuracy:.2f}%")
 
-    tp = sum(p == 1 and a == 1 for p, a in zip(predictions, y_test))
-    tn = sum(p == 0 and a == 0 for p, a in zip(predictions, y_test))
-    fp = sum(p == 1 and a == 0 for p, a in zip(predictions, y_test))
-    fn = sum(p == 0 and a == 1 for p, a in zip(predictions, y_test))
+    tp = sum(p == 1 and actual == 1 for p, actual in zip(predictions, y_test))
+    tn = sum(p == 0 and actual == 0 for p, actual in zip(predictions, y_test))
+    fp = sum(p == 1 and actual == 0 for p, actual in zip(predictions, y_test))
+    fn = sum(p == 0 and actual == 1 for p, actual in zip(predictions, y_test))
 
     print("\nConfusion Matrix:")
     print(f"True Positives:  {tp}")
@@ -227,14 +253,13 @@ def evaluate_model(model, X_test, y_test):
 # ==========================================
 
 def predict_weather(model, scaler):
-
     print("\n--- ENTER WEATHER MEASUREMENTS ---")
 
     temperature = float(input("Temperature (C): "))
-    humidity = float(input("Humidity (%): "))
+    humidity = float(input("Humidity (%) [enter 0 if unavailable]: "))
     pressure = float(input("Pressure (hPa): "))
-    wind_speed = float(input("Wind speed (km/h): "))
-    cloud_cover = float(input("Cloud cover (%): "))
+    wind_speed = float(input("Wind speed (m/s): "))
+    cloud_cover = float(input("Cloud cover (%) [enter 0 if unavailable]: "))
 
     weather_data = [[
         temperature,
@@ -245,7 +270,6 @@ def predict_weather(model, scaler):
     ]]
 
     scaled_data = scaler.transform(weather_data)
-
     prediction = model.predict_one(scaled_data[0])
 
     print("\n--- PREDICTION ---")
@@ -263,39 +287,29 @@ def predict_weather(model, scaler):
 # ==========================================
 
 def main():
-
     print("RAIN PREDICTION USING PERCEPTRON")
     print("=" * 40)
 
-    # Load dataset
-    X, y = load_dataset("weather.csv")
-
-    # Split dataset
+    X, y = load_dataset(DATASET)
     X_train, X_test, y_train, y_test = train_test_split(X, y)
 
-    # Scale features using training data
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    # Create model
     model = SingleLayerPerceptron(
         learning_rate=0.1,
         epochs=100
     )
 
-    # Train model
     print("\n--- TRAINING ---")
     model.fit(X_train, y_train)
 
-    # Evaluate model
     evaluate_model(model, X_test, y_test)
 
-    # Display parameters
     print("\nLearned weights:", model.weights)
     print("Learned bias:", model.bias)
 
-    # User input prediction
     predict_weather(model, scaler)
 
 
