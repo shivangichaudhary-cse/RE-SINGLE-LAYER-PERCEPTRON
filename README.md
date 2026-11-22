@@ -1,6 +1,6 @@
 # 🌦️ Weather Rain Prediction — Single-Layer Perceptron
 
-> A from-scratch implementation of a single-layer perceptron that predicts whether it will rain from basic weather measurements.
+> A from-scratch implementation of a single-layer perceptron that predicts whether it rains using weather measurements.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.x-blue.svg)](https://www.python.org/)
@@ -11,16 +11,16 @@
 
 ## 📌 Overview
 
-This project trains a binary classifier using a **single-layer perceptron** implemented in plain Python—without NumPy, scikit-learn, TensorFlow, or PyTorch.
+This educational project trains a binary classifier using a **single-layer perceptron** implemented entirely in plain Python—without NumPy, scikit-learn, TensorFlow, or PyTorch.
 
 Given five weather features, the model predicts:
 
 - `1` — Rain
 - `0` — No rain
 
-The program loads a small CSV dataset, scales the features, trains the model, reports test accuracy and a confusion matrix, and then accepts custom weather measurements through an interactive prompt.
+The project currently uses `weather_2025_final.csv`, a 2025 sample dataset. The data is suitable for learning and experimentation, but it is **not an official weather source and is not reliable for real forecasts**.
 
-> ⚠️ **This is an educational project**, not a reliable meteorological forecasting system.
+> ⚠️ **This is an experimental educational model, not a meteorological forecasting system.**
 
 ---
 
@@ -28,12 +28,13 @@ The program loads a small CSV dataset, scales the features, trains the model, re
 
 - Pure Python implementation
 - Custom `StandardScaler`
-- Deterministic train/test split with a fixed random seed
+- Deterministic 75/25 train/test split with seed `42`
 - Perceptron weight and bias updates
 - Epoch-by-epoch training output
-- Accuracy and confusion matrix reporting
+- Accuracy and confusion-matrix reporting
 - Interactive prediction interface
 - Input validation for malformed datasets
+- Placeholder support for unavailable humidity and cloud-cover data
 
 ---
 
@@ -41,22 +42,30 @@ The program loads a small CSV dataset, scales the features, trains the model, re
 
 ```mermaid
 flowchart TD
-    A[Weather.csv] --> B[Load CSV Rows]
-    B --> C[Separate Features and Labels]
-    C --> D[Shuffle and Split Dataset]
-    D --> E[Fit StandardScaler]
-    E --> F[Scale Training and Test Data]
-    F --> G[Initialize Perceptron]
-    G --> H[Weighted Sum + Bias]
-    H --> I{Step Activation}
-    I -->|Value >= 0| J[Predict 1: Rain]
-    I -->|Value < 0| K[Predict 0: No Rain]
-    J --> L[Compare With Actual Label]
+    A[weather_2025_final.csv] --> B[Load Weather Rows]
+    B --> C{Precipitation Available?}
+    C -->|Yes| D[precip_mm Greater Than 0 = Rain]
+    C -->|Missing| E[Skip Row]
+    D --> F[Build Five-Feature Input]
+    F --> G[mean_temp_c]
+    F --> H[humidity = 0 Until Data Is Available]
+    F --> I[pressure_hpa]
+    F --> J[wind_speed_ms]
+    F --> K[cloud_cover = 0 Until Data Is Available]
+    G --> L[Shuffle and Split Dataset]
+    H --> L
+    I --> L
+    J --> L
     K --> L
-    L --> M[Update Weights and Bias]
-    M -->|Training continues| G
-    L -->|Converged or max epochs reached| N[Evaluate on Test Data]
-    N --> O[Interactive User Prediction]
+    L --> M[Standardize Features]
+    M --> N[Train Single-Layer Perceptron]
+    N --> O{Step Activation}
+    O -->|Value >= 0| P[Predict 1: Rain]
+    O -->|Value < 0| Q[Predict 0: No Rain]
+    P --> R[Compare With Actual Label]
+    Q --> R
+    R --> S[Evaluate Accuracy and Confusion Matrix]
+    S --> T[Interactive Weather Prediction]
 ```
 
 ### Perceptron equation
@@ -80,11 +89,7 @@ prediction = 0, if z < 0
 ```text
 weight = weight + learning_rate × error × input
 bias   = bias   + learning_rate × error
-```
 
-Where:
-
-```text
 error = actual_label - predicted_label
 ```
 
@@ -92,26 +97,38 @@ error = actual_label - predicted_label
 
 ## 📊 Dataset
 
-The included [`Weather.csv`](Weather.csv) contains 20 records.
+The project currently uses [`weather_2025_final.csv`](weather_2025_final.csv), a 2025 sample containing 365 daily records.
 
-| Feature | Column | Unit / scale |
-|---|---|---|
-| Temperature | `temperature` | °C |
-| Humidity | `humidity` | % |
-| Pressure | `pressure` | hPa |
-| Wind speed | `wind_speed` | km/h |
-| Cloud cover | `cloud_cover` | % |
-| Target | `rain` | `0` = no rain, `1` = rain |
+> The CSV is based on sample data rather than an official meteorological dataset. It may contain approximations or simulated information.
 
-Each row is intentionally separated into an easy no-rain cluster and an easy rain cluster, making the perceptron suitable for demonstrating binary classification.
+| Feature | CSV column | Status | Unit |
+|---|---|---|---|
+| Temperature | `mean_temp_c` | Available | °C |
+| Humidity | `humidity` | Placeholder | % |
+| Pressure | `pressure_hpa` | Available | hPa |
+| Wind speed | `wind_speed_ms` | Available | m/s |
+| Cloud cover | `cloud_cover` | Placeholder | % |
+| Target | Derived from `precip_mm` | `precip_mm > 0` → `1`; `precip_mm = 0` → `0` | — |
+
+Humidity and cloud cover are still included as model features. Because this dataset does not currently provide them, both use `0.0` while loading:
+
+```python
+humidity = float(humidity_text) if humidity_text else 0.0
+cloud_cover = float(cloud_text) if cloud_text else 0.0
+```
+
+When real humidity or cloud-cover data becomes available, add a matching column to the CSV and replace the placeholder values.
 
 **Dataset preview:**
 
 ```csv
-temperature,humidity,pressure,wind_speed,cloud_cover,rain
-28,42,1016,7,15,0
-29,88,1001,24,95,1
+date,mean_temp_c,min_temp_c,max_temp_c,precip_mm,wind_dir_deg,wind_speed_ms,pressure_hpa
+2025-01-01,7.1,4.6,11.4,0.0,320,9.8,1015.2
+2025-01-02,7.7,2.4,13.6,0.0,355,6.0,1015.3
+2025-01-03,5.6,4.2,6.8,1.6,21,7.8,1014.8
 ```
+
+Rows with missing precipitation values are skipped because they cannot produce a reliable rain label.
 
 ---
 
@@ -119,13 +136,15 @@ temperature,humidity,pressure,wind_speed,cloud_cover,rain
 
 ```text
 RE-SINGLE-LAYER-PERCEPTRON/
-├── rain_perceptron.py.  # Training, evaluation, and interactive prediction
-├── Weather.csv          # Weather measurements and rain labels
-├── README.md            # Project documentation
-└── LICENSE              # MIT license
+├── rain_perceptron.py.          # Training, evaluation, and prediction
+├── weather_2025_final.csv       # 2025 sample weather dataset
+├── Weather.csv                  # Small original demonstration dataset
+├── 47662.csv.gz                 # Original compressed source download
+├── README.md                    # Project documentation
+└── LICENSE                      # MIT license
 ```
 
-> The Python source currently has a trailing dot in its filename: `rain_perceptron.py.` (a Python script normally ends in `.py`).
+> The source currently uses a trailing dot in `rain_perceptron.py.`; this is not the conventional `.py` extension.
 
 ---
 
@@ -151,24 +170,14 @@ cd RE-SINGLE-LAYER-PERCEPTRON
 
 ### Run the program
 
-Because the filename contains a trailing dot, run it exactly as:
-
 ```bash
 python "rain_perceptron.py."
 ```
 
-> **Note:** The program currently loads `weather.csv`, while the repository file is named `Weather.csv`. On Linux and other case-sensitive systems, rename the file or change the filename in `main()` to `"Weather.csv"`.
+The program automatically loads:
 
-```bash
-mv Weather.csv weather.csv
-python "rain_perceptron.py."
-```
-
-On Windows, use:
-
-```powershell
-Rename-Item Weather.csv weather.csv
-python rain_perceptron.py.
+```text
+weather_2025_final.csv
 ```
 
 ---
@@ -180,35 +189,32 @@ RAIN PREDICTION USING PERCEPTRON
 ========================================
 
 --- TRAINING ---
-Epoch 1: 3 incorrect predictions
-Epoch 2: 0 incorrect predictions
-Training converged!
+Epoch 1: 47 incorrect predictions
+Epoch 2: 28 incorrect predictions
+...
 
 --- MODEL EVALUATION ---
-Accuracy: 100.00%
+Accuracy: 72.53%
 
 Confusion Matrix:
-True Positives:  2
-True Negatives:  3
-False Positives: 0
-False Negatives: 0
-
-Learned weights: [0.12, 0.34, ...]
-Learned bias: 0.02
+True Positives:  24
+True Negatives:  42
+False Positives: 12
+False Negatives: 13
 
 --- ENTER WEATHER MEASUREMENTS ---
-Temperature (C): 27
-Humidity (%): 89
-Pressure (hPa): 1002
-Wind speed (km/h): 22
-Cloud cover (%): 93
+Temperature (C): 22
+Humidity (%) [enter 0 if unavailable]: 0
+Pressure (hPa): 1012
+Wind speed (m/s): 8
+Cloud cover (%) [enter 0 if unavailable]: 0
 
 --- PREDICTION ---
 The model predicts RAIN.
 (Experimental model output, not a reliable weather forecast.)
 ```
 
-The example output is illustrative; learned parameters and metrics may vary if the implementation or data changes.
+The values above are illustrative. Training results depend on the random split and the data available in the CSV.
 
 ---
 
@@ -216,42 +222,42 @@ The example output is illustrative; learned parameters and metrics may vary if t
 
 | Component | Responsibility |
 |---|---|
-| `load_dataset()` | Reads CSV features and binary labels |
-| `train_test_split()` | Randomly divides data while using seed `42` |
-| `StandardScaler` | Fits feature means and standard deviations; transforms data |
+| `load_dataset()` | Reads the sample CSV and derives the rain label |
+| `train_test_split()` | Randomly divides data using seed `42` |
+| `StandardScaler` | Standardizes each of the five model features |
 | `SingleLayerPerceptron` | Stores weights/bias and implements training |
 | `net_input()` | Calculates the weighted sum |
-| `activation()` | Applies a step activation function |
-| `fit()` | Trains the perceptron over up to 100 epochs |
+| `activation()` | Applies the step activation function |
+| `fit()` | Trains for up to 100 epochs |
 | `evaluate_model()` | Calculates accuracy and confusion-matrix values |
-| `predict_weather()` | Collects input and prints the final prediction |
+| `predict_weather()` | Collects input and prints a prediction |
 
 ---
 
 ## 📈 Model Limitations
 
-- Uses a **linear decision boundary**, so it cannot learn every dataset pattern.
-- Trained on only 20 records.
-- Uses a small, manually designed dataset that may not represent real weather.
-- The random 75/25 split may leave few examples for testing.
-- Scaling currently uses the full training split, but it is not repeatedly cross-validated.
-- No persistence: learned weights are discarded when the program exits.
-- No model metrics are printed in machine-readable formats.
+- Uses a **linear decision boundary**.
+- Humidity and cloud cover are placeholder zero values for now.
+- Trained on sample 2025 data rather than official or verified observations.
+- The perceptron may be sensitive to the single random train/test split.
+- Missing or incomplete precipitation values are skipped.
+- No official geographic station information is modeled.
+- Learned weights are not saved between runs.
 
 ---
 
 ## 🔧 Possible Improvements
 
+- Add real humidity and cloud-cover columns when available
 - Rename the source file to `rain_perceptron.py`
-- Standardize the dataset filename as `Weather.csv`
-- Add command-line arguments for learning rate, epochs, and test ratio
+- Replace the placeholder values with missing-value handling or imputation
+- Add command-line arguments for dataset and hyperparameters
 - Save and load trained weights
-- Add a larger and more realistic weather dataset
-- Provide precision, recall, F1 score, and ROC-AUC
-- Use stratified train/test splitting
-- Split scaling only from training data in a clear evaluation pipeline
-- Add unit tests for loading, scaling, training, and prediction
-- Add a plotting mode for decision boundaries and training error history
+- Add stratified train/test splitting
+- Report precision, recall, F1 score, and ROC-AUC
+- Add automated unit tests
+- Add plots for training error and the decision boundary
+- Validate the model using official weather observations
 
 ---
 
@@ -259,7 +265,7 @@ The example output is illustrative; learned parameters and metrics may vary if t
 
 The project does not currently include an automated test suite.
 
-A basic smoke test is:
+A basic syntax check is:
 
 ```bash
 python -m compileall .
@@ -267,11 +273,13 @@ python -m compileall .
 
 For functional testing, run the program and verify that:
 
-- The CSV loads successfully
+- `weather_2025_final.csv` loads successfully
+- Rows with missing precipitation are skipped
+- The dataset creates valid `0` and `1` labels
 - Training finishes or converges
 - Accuracy is printed
 - Confusion-matrix values sum to the test-set size
-- Custom input produces a valid `0` or `1` prediction
+- Custom input produces a valid prediction
 
 ---
 
@@ -281,20 +289,24 @@ Contributions are welcome.
 
 1. Fork the repository
 2. Create a feature branch
+
    ```bash
    git checkout -b feature/improvement
    ```
+
 3. Commit your changes
+
    ```bash
-   git commit -m "Improve perceptron implementation"
+   git commit -m "Improve weather perceptron"
    ```
+
 4. Push your branch
+
    ```bash
    git push origin feature/improvement
    ```
-5. Open a pull request
 
-Before contributing, keep educational readability and minimal dependencies in mind.
+5. Open a pull request
 
 ---
 
